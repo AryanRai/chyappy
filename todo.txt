@@ -1,1 +1,2 @@
 sender: send float as binary float instead of string
+receiver: use serial instead of pyserial
