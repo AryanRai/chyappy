@@ -108,23 +108,80 @@
 <li><strong>Checksum Calculation</strong>: Validate the checksum for data integrity.</li>
 <li><strong>process_message Function</strong>: Converts the payload to a string and prints the sensor type, sensor ID, and payload value.</li>
 </ul>
-<h2 id="raspberry-pi-receiver-code-python">Raspberry Pi Receiver Code (Python)</h2>
-<h3 id="raspberry-pi-receiver-code-example">Raspberry Pi Receiver Code (Example)</h3>
-<pre class=" language-python"><code class="prism  language-python">
+<h3 id="raspberry-pi-receiver-code-python">Raspberry Pi Receiver Code (Python)</h3>
+<pre class=" language-python"><code class="prism  language-python"><span class="token keyword">import</span> serial
+
+START_MARKER <span class="token operator">=</span> <span class="token number">0x7E</span>
+
+<span class="token keyword">def</span> <span class="token function">calculate_checksum</span><span class="token punctuation">(</span>data<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token triple-quoted-string string">"""Calculate the XOR checksum of the given data."""</span>
+    checksum <span class="token operator">=</span> <span class="token number">0</span>
+    <span class="token keyword">for</span> byte <span class="token keyword">in</span> data<span class="token punctuation">:</span>
+        checksum <span class="token operator">^</span><span class="token operator">=</span> byte
+    <span class="token keyword">return</span> checksum
+
+<span class="token keyword">def</span> <span class="token function">process_message</span><span class="token punctuation">(</span>sensor_type<span class="token punctuation">,</span> sensor_id<span class="token punctuation">,</span> payload<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token triple-quoted-string string">"""Process the received message and print the details."""</span>
+    <span class="token comment"># Print the sensor type, sensor ID, and payload in hexadecimal format</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span>f<span class="token string">"Received sensor type: {chr(sensor_type)}"</span><span class="token punctuation">)</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span>f<span class="token string">"Sensor ID: {sensor_id}"</span><span class="token punctuation">)</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">"Payload (hex):"</span><span class="token punctuation">,</span> <span class="token string">' '</span><span class="token punctuation">.</span>join<span class="token punctuation">(</span><span class="token builtin">format</span><span class="token punctuation">(</span>x<span class="token punctuation">,</span> <span class="token string">'02x'</span><span class="token punctuation">)</span> <span class="token keyword">for</span> x <span class="token keyword">in</span> payload<span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+    <span class="token comment"># Convert the payload to a string and print</span>
+    payload_str <span class="token operator">=</span> <span class="token string">''</span><span class="token punctuation">.</span>join<span class="token punctuation">(</span><span class="token builtin">chr</span><span class="token punctuation">(</span>x<span class="token punctuation">)</span> <span class="token keyword">for</span> x <span class="token keyword">in</span> payload<span class="token punctuation">)</span>
+    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">"Payload (as string):"</span><span class="token punctuation">,</span> payload_str<span class="token punctuation">)</span>
+
+<span class="token keyword">def</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token comment"># Set up the serial connection (adjust the port and baud rate as needed)</span>
+    ser <span class="token operator">=</span> serial<span class="token punctuation">.</span>Serial<span class="token punctuation">(</span><span class="token string">'/dev/ttyS0'</span><span class="token punctuation">,</span> <span class="token number">115200</span><span class="token punctuation">,</span> timeout<span class="token operator">=</span><span class="token number">1</span><span class="token punctuation">)</span>
+    
+    <span class="token keyword">while</span> <span class="token boolean">True</span><span class="token punctuation">:</span>
+        <span class="token keyword">if</span> ser<span class="token punctuation">.</span>in_waiting <span class="token operator">&gt;</span> <span class="token number">0</span><span class="token punctuation">:</span>
+            <span class="token comment"># Read the start marker</span>
+            <span class="token keyword">if</span> ser<span class="token punctuation">.</span>read<span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token builtin">bytes</span><span class="token punctuation">(</span><span class="token punctuation">[</span>START_MARKER<span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+                <span class="token comment"># Read the length, sensor type, and sensor ID</span>
+                length <span class="token operator">=</span> ser<span class="token punctuation">.</span>read<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+                sensor_type <span class="token operator">=</span> ser<span class="token punctuation">.</span>read<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+                sensor_id <span class="token operator">=</span> ser<span class="token punctuation">.</span>read<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+                
+                <span class="token comment"># Read the payload and checksum</span>
+                payload <span class="token operator">=</span> ser<span class="token punctuation">.</span>read<span class="token punctuation">(</span>length<span class="token punctuation">)</span>
+                received_checksum <span class="token operator">=</span> ser<span class="token punctuation">.</span>read<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+                
+                <span class="token comment"># Verify the checksum</span>
+                <span class="token keyword">if</span> calculate_checksum<span class="token punctuation">(</span>payload<span class="token punctuation">)</span> <span class="token operator">==</span> received_checksum<span class="token punctuation">:</span>
+                    process_message<span class="token punctuation">(</span>sensor_type<span class="token punctuation">,</span> sensor_id<span class="token punctuation">,</span> payload<span class="token punctuation">)</span>
+                <span class="token keyword">else</span><span class="token punctuation">:</span>
+                    <span class="token keyword">print</span><span class="token punctuation">(</span><span class="token string">"Checksum error"</span><span class="token punctuation">)</span>
+
+<span class="token keyword">if</span> __name__ <span class="token operator">==</span> <span class="token string">"__main__"</span><span class="token punctuation">:</span>
+    main<span class="token punctuation">(</span><span class="token punctuation">)</span>
 </code></pre>
 <h3 id="explanation-2">Explanation</h3>
 <ul>
-<li><strong>START_MARKER</strong>: Defines the start of the message.</li>
-<li><strong>calculate_checksum</strong>: Function to calculate the checksum for validation.</li>
-<li><strong>process_message Function</strong>: Prints the sensor type, sensor ID, and payload. Converts the payload to a string and prints it.</li>
-<li><strong>main Function</strong>: Reads and processes incoming messages from the serial port.</li>
+<li><strong>START_MARKER</strong>: The unique byte (0x7E) indicating the start of a message.</li>
+<li><strong>calculate_checksum</strong>: Function to calculate the XOR checksum for the given data.</li>
+<li><strong>process_message</strong>: Function to process the received message. It prints the sensor type, sensor ID, and payload (both as hexadecimal values and as a string).</li>
+<li><strong>main</strong>: The main function sets up the serial connection and continuously reads incoming messages. It reads the start marker, length, sensor type, sensor ID, payload, and checksum, and then verifies the checksum before processing the message.</li>
 </ul>
-<h2 id="configuration">Configuration</h2>
+<h3 id="configuration">Configuration</h3>
+<ul>
+<li><strong>Serial Port</strong>: Adjust <code>/dev/ttyS0</code> to match the serial port you are using on the Raspberry Pi. For example, it might be <code>/dev/ttyUSB0</code> if you are using a USB-to-RS485 adapter.</li>
+<li><strong>Baud Rate</strong>: Ensure the baud rate matches the one set on the STM32 and Arduino.</li>
+</ul>
+<h3 id="usage">Usage</h3>
+<ol>
+<li><strong>Connect the RS485 transceivers</strong> to the STM32, Arduino, and Raspberry Pi.</li>
+<li><strong>Run the Python script</strong> on the Raspberry Pi.</li>
+<li><strong>Send a message</strong> from the STM32 using the provided STM32 sender code.</li>
+<li><strong>Observe the output</strong> on the Raspberry Pi terminal, which should display the received message details.</li>
+</ol>
+<h2 id="configuration-1">Configuration</h2>
 <ul>
 <li><strong>Baud Rate</strong>: Ensure the same baud rate is set for STM32, Arduino, and Raspberry Pi.</li>
 <li><strong>Serial Ports</strong>: Adjust the serial port names in the code as needed (<code>/dev/ttyS0</code> for Raspberry Pi, <code>Serial</code> for Arduino).</li>
 </ul>
-<h2 id="usage">Usage</h2>
+<h2 id="usage-1">Usage</h2>
 <ol>
 <li><strong>STM32</strong>: Initialize the system, set up the UART, construct the message, and send it.</li>
 <li><strong>Arduino</strong>: Set up the serial connection, read and validate incoming messages, and process the payload.</li>

@@ -1,7 +1,4 @@
-﻿# chyappy
-a data simple easy to use one way sensor data transmission protocol for RS485 and other applications specifically when logging  
-
-# Communication Protocol and Implementation for STM32, Arduino, and Raspberry Pi
+﻿# Communication Protocol and Implementation for STM32, Arduino, and Raspberry Pi
 
 ## Overview
 This documentation describes a custom protocol for sending sensor data from an STM32 microcontroller to an Arduino and a Raspberry Pi using RS485 and UART. The protocol includes the sensor type, sensor identifier, and sensor data, with a checksum for data integrity.
@@ -107,18 +104,74 @@ int main(void) {
 - **Checksum Calculation**: Validate the checksum for data integrity.
 - **process_message Function**: Converts the payload to a string and prints the sensor type, sensor ID, and payload value.
 
-## Raspberry Pi Receiver Code (Python)
 
-### Raspberry Pi Receiver Code (Example)
+### Raspberry Pi Receiver Code (Python)
+
 ```python
+import serial
 
+START_MARKER = 0x7E
+
+def calculate_checksum(data):
+    """Calculate the XOR checksum of the given data."""
+    checksum = 0
+    for byte in data:
+        checksum ^= byte
+    return checksum
+
+def process_message(sensor_type, sensor_id, payload):
+    """Process the received message and print the details."""
+    # Print the sensor type, sensor ID, and payload in hexadecimal format
+    print(f"Received sensor type: {chr(sensor_type)}")
+    print(f"Sensor ID: {sensor_id}")
+    print("Payload (hex):", ' '.join(format(x, '02x') for x in payload))
+
+    # Convert the payload to a string and print
+    payload_str = ''.join(chr(x) for x in payload)
+    print("Payload (as string):", payload_str)
+
+def main():
+    # Set up the serial connection (adjust the port and baud rate as needed)
+    ser = serial.Serial('/dev/ttyS0', 115200, timeout=1)
+    
+    while True:
+        if ser.in_waiting > 0:
+            # Read the start marker
+            if ser.read() == bytes([START_MARKER]):
+                # Read the length, sensor type, and sensor ID
+                length = ser.read()[0]
+                sensor_type = ser.read()[0]
+                sensor_id = ser.read()[0]
+                
+                # Read the payload and checksum
+                payload = ser.read(length)
+                received_checksum = ser.read()[0]
+                
+                # Verify the checksum
+                if calculate_checksum(payload) == received_checksum:
+                    process_message(sensor_type, sensor_id, payload)
+                else:
+                    print("Checksum error")
+
+if __name__ == "__main__":
+    main()
 ```
 
 ### Explanation
-- **START_MARKER**: Defines the start of the message.
-- **calculate_checksum**: Function to calculate the checksum for validation.
-- **process_message Function**: Prints the sensor type, sensor ID, and payload. Converts the payload to a string and prints it.
-- **main Function**: Reads and processes incoming messages from the serial port.
+- **START_MARKER**: The unique byte (0x7E) indicating the start of a message.
+- **calculate_checksum**: Function to calculate the XOR checksum for the given data.
+- **process_message**: Function to process the received message. It prints the sensor type, sensor ID, and payload (both as hexadecimal values and as a string).
+- **main**: The main function sets up the serial connection and continuously reads incoming messages. It reads the start marker, length, sensor type, sensor ID, payload, and checksum, and then verifies the checksum before processing the message.
+
+### Configuration
+- **Serial Port**: Adjust `/dev/ttyS0` to match the serial port you are using on the Raspberry Pi. For example, it might be `/dev/ttyUSB0` if you are using a USB-to-RS485 adapter.
+- **Baud Rate**: Ensure the baud rate matches the one set on the STM32 and Arduino.
+
+### Usage
+1. **Connect the RS485 transceivers** to the STM32, Arduino, and Raspberry Pi.
+2. **Run the Python script** on the Raspberry Pi.
+3. **Send a message** from the STM32 using the provided STM32 sender code.
+4. **Observe the output** on the Raspberry Pi terminal, which should display the received message details.
 
 ## Configuration
 - **Baud Rate**: Ensure the same baud rate is set for STM32, Arduino, and Raspberry Pi.
