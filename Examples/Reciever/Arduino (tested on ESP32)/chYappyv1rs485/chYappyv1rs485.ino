@@ -18,8 +18,8 @@
 /*           GPIO define              */
 /**************************************/
 #define RS485_PIN_DIR 4
-#define RXD2 18
-#define TXD2 19
+#define RXD2 16
+#define TXD2 17
 
 
 
