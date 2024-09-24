@@ -1,2 +1,6 @@
 sender: send float as binary float instead of string
 receiver: use serial instead of pyserial
+
+
+combine SensorID and SensorType into one unique sensor identidier USI
+dynamic senorID/USI allication

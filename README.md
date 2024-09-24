@@ -1,4 +1,7 @@
-﻿# Communication Protocol and Implementation for STM32, Arduino, and Raspberry Pi
+﻿# CHYappy v1.1
+
+# V1.0
+# Communication Protocol and Implementation for STM32, Arduino, and Raspberry Pi
 
 ## Overview
 This documentation describes a custom protocol for sending sensor data from an STM32 microcontroller to an Arduino and a Raspberry Pi using RS485 and UART. The protocol includes the sensor type, sensor identifier, and sensor data, with a checksum for data integrity.
@@ -8,6 +11,7 @@ The message structure is defined as follows:
 ```
 | Start Marker (1 byte) | Length (1 byte) | Sensor Type (1 byte) | Sensor ID (1 byte) | Payload (N bytes) | Checksum (1 byte) |
 ```
+
 - **Start Marker**: A unique byte (0x7E) indicating the start of the message.
 - **Length**: The length of the payload.
 - **Sensor Type**: A character representing the sensor type (e.g., 'T' for temperature).
