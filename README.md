@@ -1,4 +1,164 @@
-﻿# CHYappy v1.1
+﻿
+---
+
+# **chYAPpy v1.2**
+### **Communication Protocol and Implementation for STM32, Arduino, and Raspberry Pi**
+
+#### **Overview**
+chYAPpy v1.2 is an enhanced custom protocol designed for transmitting sensor data between microcontrollers (e.g., STM32, Arduino/Teensy) and other devices (e.g., Raspberry Pi) over various communication mediums such as RS485, LoRa, and UART. It introduces versioning via start markers, adds sequence numbers for packet tracking, supports typed payloads for efficiency, and upgrades error detection with CRC-8. This protocol is optimized for reliability in noisy environments like high-performance rocketry while remaining backward-compatible with v1.1 through distinct start markers.
+
+#### **Protocol Structure**
+The message structure for chYAPpy v1.2 is as follows:
+
+| Field              | Size (Bytes) | Description                                                                 |
+|--------------------|--------------|-----------------------------------------------------------------------------|
+| **Start Marker**   | 1            | Unique byte indicating the protocol version and message start (0x7D for v1.2). |
+| **Length**         | 1            | Length of the payload (0-255 bytes).                                       |
+| **Sensor Type**    | 1            | Character representing the sensor type (e.g., 'T' for temperature).        |
+| **Sensor ID**      | 1            | Numeric identifier for the sensor (0-255).                                 |
+| **Sequence Number**| 2            | 16-bit number for packet ordering and tracking (0-65535).                  |
+| **Payload Type**   | 1            | Indicates the data type of the payload (e.g., 0x01 for string, 0x02 for float). |
+| **Payload**        | N            | Variable-length sensor data, format depends on Payload Type.               |
+| **Checksum**       | 1            | CRC-8 checksum for error detection (covers Length to Payload).             |
+
+**Total Size:** `8 + N` bytes, where `N` is the payload length.
+
+#### **Field Details**
+1. **Start Marker (1 byte):**
+   - Value: `0x7D` (distinguishes v1.2 from v1.1’s `0x7E`).
+   - Purpose: Marks the beginning of the message and identifies the protocol version.
+
+2. **Length (1 byte):**
+   - Range: 0-255.
+   - Purpose: Specifies the number of bytes in the payload (excludes header and checksum).
+
+3. **Sensor Type (1 byte):**
+   - Examples: `'T'` (temperature), `'A'` (accelerometer), `'G'` (gyroscope).
+   - Purpose: Identifies the type of sensor data being transmitted.
+
+4. **Sensor ID (1 byte):**
+   - Range: 0-255.
+   - Purpose: Uniquely identifies the sensor within its type (e.g., Thermocouple 1 vs. 2).
+
+5. **Sequence Number (2 bytes):**
+   - Range: 0-65535 (16-bit unsigned integer, big-endian).
+   - Purpose: Tracks packet order and detects missing messages; increments per transmission.
+
+6. **Payload Type (1 byte):**
+   - Values:
+     - `0x01`: String (ASCII-encoded, variable length).
+     - `0x02`: Float (4 bytes, IEEE 754 single precision).
+     - `0x03`: Int16 (2 bytes, signed).
+     - `0x04`: Int32 (4 bytes, signed).
+   - Purpose: Specifies the format of the payload for efficient parsing.
+
+7. **Payload (N bytes):**
+   - Content: Sensor data, formatted according to Payload Type.
+   - Examples:
+     - String: `"25.3662"` (7 bytes).
+     - Float: 4-byte binary representation of 25.3662.
+   - Purpose: Carries the actual sensor measurement.
+
+8. **Checksum (1 byte):**
+   - Algorithm: CRC-8 (Dallas/Maxim, polynomial 0x31).
+   - Scope: Calculated over `Length`, `Sensor Type`, `Sensor ID`, `Sequence Number`, `Payload Type`, and `Payload`.
+   - Purpose: Ensures data integrity with stronger error detection than v1.1’s XOR.
+
+#### **Comparison with v1.1**
+| Feature            | v1.1                     | v1.2                         |
+|--------------------|--------------------------|------------------------------|
+| **Start Marker**   | 0x7E (fixed)             | 0x7D (version-specific)      |
+| **Sequence Number**| None                     | 2 bytes                      |
+| **Payload Type**   | Implicit (string)        | Explicit (1 byte)            |
+| **Checksum**       | XOR (1 byte)             | CRC-8 (1 byte)               |
+| **Size Overhead**  | 5 bytes                  | 8 bytes                      |
+
+#### **Example Messages**
+1. **Temperature (String):**
+   - Data: 25.3662°C from Thermocouple 1, sequence number 42.
+   - Format: `| 0x7D | 0x07 | 'T' | 0x01 | 0x00 0x2A | 0x01 | "25.3662" | CRC |`
+   - Hex: `7D 07 54 01 00 2A 01 32 35 2E 33 36 36 32 [CRC]`
+
+2. **Acceleration (Float):**
+   - Data: 9.81 m/s² from Accelerometer 2, sequence number 43.
+   - Format: `| 0x7D | 0x04 | 'A' | 0x02 | 0x00 0x2B | 0x02 | [9.81 float] | CRC |`
+   - Hex: `7D 04 41 02 00 2B 02 41 1C 7A E1 [CRC]`
+
+#### **Implementation Notes**
+- **Sender:**
+  - Increment `Sequence Number` for each message.
+  - Choose `Payload Type` based on data (e.g., string for human-readable logs, float for efficiency).
+  - Compute CRC-8 over all bytes from `Length` to end of `Payload`.
+
+- **Receiver:**
+  - Check `Start Marker` to determine version (0x7D for v1.2, 0x7E for v1.1).
+  - Validate `Length` against received bytes.
+  - Verify CRC-8; discard if mismatched.
+  - Parse `Payload` based on `Payload Type`.
+
+- **Error Handling:**
+  - If CRC fails, log the error and discard the packet.
+  - Use `Sequence Number` to detect dropped packets.
+
+#### **Reference Code (Arduino/Teensy)**
+```cpp
+#include <Arduino.h>
+
+#define CHYAPPY_V1_2_START 0x7D
+#define PAYLOAD_TYPE_STRING 0x01
+#define PAYLOAD_TYPE_FLOAT 0x02
+
+uint8_t crc8(const uint8_t* data, uint8_t len) {
+  uint8_t crc = 0;
+  for (uint8_t i = 0; i < len; i++) {
+    crc ^= data[i];
+    for (uint8_t j = 0; j < 8; j++) {
+      if (crc & 0x80) crc = (crc << 1) ^ 0x31;
+      else crc <<= 1;
+    }
+  }
+  return crc;
+}
+
+void sendChYAPpyV12(Stream& output, uint8_t sensorType, uint8_t sensorId, uint16_t seqNum, uint8_t payloadType, const uint8_t* payload, uint8_t length) {
+  uint8_t message[length + 8];
+  message[0] = CHYAPPY_V1_2_START;
+  message[1] = length;
+  message[2] = sensorType;
+  message[3] = sensorId;
+  message[4] = seqNum >> 8;
+  message[5] = seqNum & 0xFF;
+  message[6] = payloadType;
+  for (uint8_t i = 0; i < length; i++) {
+    message[7 + i] = payload[i];
+  }
+  message[length + 7] = crc8(&message[1], length + 6);
+
+  output.write(message, length + 8);
+  output.flush();
+}
+
+// Example usage
+void sendTempExample(Stream& output) {
+  float temp = 25.3662;
+  uint16_t seq = 42;
+  sendChYAPpyV12(output, 'T', 1, seq, PAYLOAD_TYPE_FLOAT, (uint8_t*)&temp, 4);
+}
+```
+
+#### **Applications**
+- **High-Performance Rocketry:** Reliable telemetry for sensors (temperature, IMU, ADC) over RS485 and LoRa.
+- **CubeSats:** Efficient data transmission with type support for binary data.
+- **Ground Stations:** Sequence numbers aid in reconstructing flight data timelines.
+
+#### **Future Extensions (v2.0, Start Marker 0x7C)**
+- Add flags for priority or acknowledgment.
+- Support larger payloads with 2-byte length.
+- Include an end marker for additional framing robustness.
+
+---
+
+# CHYappy v1.1
 
 # V1.0
 # Communication Protocol and Implementation for STM32, Arduino, and Raspberry Pi
